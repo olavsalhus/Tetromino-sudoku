@@ -129,8 +129,8 @@ class GameScene: SKScene {
             
             for (x, line) in newShapeNodes[shapeIndex].enumerated() {
                 for (y, block) in line.enumerated() {
-                    
-                    block.position.x = newShapeGridSize * CGFloat(x + 5 * shapeIndex) + brickMargin - size.width / 2.0
+                    let xOffset = CGFloat(6 - wShape) / 2.0
+                    block.position.x = newShapeGridSize * CGFloat(xOffset + CGFloat(x + 6 * shapeIndex)) + brickMargin - size.width / 2.0
                     block.position.y = newShapeGridSize * CGFloat(y + 4) + brickMargin - size.height / 2.0
                     (block.xScale, block.yScale) = (1, 1)
                     block.isHidden = !(shapeIsVisible[shapeIndex] && (x < wShape && y < hShape && currentShapes[shapeIndex][x][y] == 1))
@@ -159,14 +159,14 @@ class GameScene: SKScene {
     var shapeIndex = -1
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         
-        let x = brickMargin - size.width / 2.0
-        let y = newShapeGridSize * 4.0 + brickMargin - size.height / 2.0
+        let x = brickMargin - size.width  / 2.0
+        let y = brickMargin - size.height / 2.0
         
-        let size = newShapeGridSize * 5.0
+        let size = newShapeGridSize * 6
         
         let p = touches.first!.location(in: self)
         
-        if y <= p.y && p.y <= y + size {
+        if y <= p.y && p.y <= y + size * 2 {
             
             shapeIndex = Int((p.x - x) / size)
             if shapeIndex >= 3 {
@@ -187,12 +187,12 @@ class GameScene: SKScene {
     }
     
     func shapeFits(_ shape: [[Int]]) -> Bool {
-        for x in 0...(boardWidth - shape[0].count) {
-            for y in 0...(boardWidth - shape.count) {
+        for x in 0...(boardWidth - shape.count) {
+            for y in 0...(boardWidth - shape[0].count) {
                 var hasSpace = true
-                for dx in 0..<shape[0].count {
-                    for dy in 0..<shape.count {
-                        if isSquareSolid[x + dx][y + dy] && shape[dy][dx] == 1  {
+                for dx in 0..<shape.count {
+                    for dy in 0..<shape[0].count {
+                        if isSquareSolid[x + dx][y + dy] && shape[dx][dy] == 1  {
                             hasSpace = false
                         }
                     }
@@ -280,7 +280,7 @@ class GameScene: SKScene {
                     }
                 }
                 if gameOver {
-                    scoreLabel.text = "\(score)"
+                    
                     clearBoard()
                     shapeIsVisible = [true, true, true]
                     currentShapes = [getRandomShape(), getRandomShape(), getRandomShape()]
@@ -289,10 +289,10 @@ class GameScene: SKScene {
                         highScore = UserDefaults.standard.integer(forKey: "highscore")
                     } else {
                         printLabel("Game over\nHigh score:\n\(highScore)\nScore:\n\(score)", 3)
-                        
                     }
                     
                     score = 0
+                    scoreLabel.text = "0"
                 }
             }
             resetShapePositions()
