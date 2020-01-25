@@ -88,6 +88,7 @@ class GameScene: SKScene {
         }
         
         
+        currentShapes = [getRandomShape(), getRandomShape(), getRandomShape()]
         newShapeGridSize = gridsize / 2.0
         for (shapeIndex, shape) in newShapeNodes.enumerated() {
             for (x, line) in shape.enumerated() {
@@ -97,8 +98,8 @@ class GameScene: SKScene {
                             height: newShapeGridSize * brickInnerSizeRatio
                         ))
                     newShapeNodes[shapeIndex][x][y].position.x = CGFloat(shapeIndex) * newShapeGridSize * 5.0
+                    newShapeNodes[shapeIndex][x][y].strokeColor = getShapeColor(currentShapes[shapeIndex].1)
                     newShapeNodes[shapeIndex][x][y].lineWidth = newShapeGridSize * brickMargin
-                    newShapeNodes[shapeIndex][x][y].strokeColor = shapeColors[shapeIndex]
                     newShapeNodes[shapeIndex][x][y].isHidden = true
                     addChild(newShapeNodes[shapeIndex][x][y])
                 }
@@ -112,20 +113,23 @@ class GameScene: SKScene {
         scoreLabel.horizontalAlignmentMode = .left
         addChild(scoreLabel)
         
-        currentShapes = [getRandomShape(), getRandomShape(), getRandomShape()]
         resetShapePositions()
+    }
+    
+    func getShapeColor(_ i: Int) -> UIColor {
+        return UIColor(hue: CGFloat(i)/CGFloat(shapes.count), saturation: 1, brightness: 1, alpha: 1)
     }
     
     var scoreLabel = SKLabelNode(text: "0")
     
     var newShapeGridSize = CGFloat()
     let transparent = UIColor(white: 0.0, alpha: 0.0)
-    var currentShapes : [[[Int]]] = []
+    var currentShapes : [([[Int]], Int)] = []
     var shapeIsVisible = [true, true, true]
     
     func resetShapePositions() {
         for shapeIndex in 0..<3 {
-            let (hShape, wShape) = (currentShapes[shapeIndex][0].count, currentShapes[shapeIndex].count)
+            let (hShape, wShape) = (currentShapes[shapeIndex].0[0].count, currentShapes[shapeIndex].0.count)
             
             for (x, line) in newShapeNodes[shapeIndex].enumerated() {
                 for (y, block) in line.enumerated() {
@@ -133,7 +137,8 @@ class GameScene: SKScene {
                     block.position.x = newShapeGridSize * CGFloat(xOffset + CGFloat(x + 6 * shapeIndex)) + brickMargin - size.width / 2.0
                     block.position.y = newShapeGridSize * CGFloat(y + 4) + brickMargin - size.height / 2.0
                     (block.xScale, block.yScale) = (1, 1)
-                    block.isHidden = !(shapeIsVisible[shapeIndex] && (x < wShape && y < hShape && currentShapes[shapeIndex][x][y] == 1))
+                    block.strokeColor = getShapeColor(currentShapes[shapeIndex].1)
+                    block.isHidden = !(shapeIsVisible[shapeIndex] && (x < wShape && y < hShape && currentShapes[shapeIndex].0[x][y] == 1))
                 }
             }
         }
@@ -142,7 +147,7 @@ class GameScene: SKScene {
     
     func moveShape(_ p: CGPoint) {
 
-        let (hShape, wShape) = (currentShapes[shapeIndex][0].count, currentShapes[shapeIndex].count)
+        let (hShape, wShape) = (currentShapes[shapeIndex].0[0].count, currentShapes[shapeIndex].0.count)
         
             for (x, line) in newShapeNodes[shapeIndex].enumerated() {
                 for (y, block) in line.enumerated() {
@@ -150,7 +155,7 @@ class GameScene: SKScene {
                     block.position.y = gridsize * (2.0 + CGFloat(y) - CGFloat(wShape) / 2.0) + brickMargin + p.y
                     block.xScale = 2
                     block.yScale = 2
-                    block.isHidden = !(shapeIsVisible[shapeIndex] && x < wShape && y < hShape && currentShapes[shapeIndex][x][y] == 1)
+                    block.isHidden = !(shapeIsVisible[shapeIndex] && x < wShape && y < hShape && currentShapes[shapeIndex].0[x][y] == 1)
                 }
             }
         
@@ -182,7 +187,11 @@ class GameScene: SKScene {
         if shapeIndex >= 0 {
             _ = dropShape(boardBackgroundColor)
             moveShape(p)
-            _ = dropShape(previewColor)
+            let shapeDropped = dropShape(previewColor, highlight: true)
+            
+            if !shapeDropped {
+                removeHighlight()
+            }
         }
     }
     
@@ -259,10 +268,11 @@ class GameScene: SKScene {
     }
     var highScore = UserDefaults.standard.integer(forKey: "highscore")
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+
+        removeHighlight()
         if shapeIndex >= 0 {
             
-            
-            let shapeDropped = dropShape(shapeColors[shapeIndex])
+            let shapeDropped = dropShape(getShapeColor(currentShapes[shapeIndex].1))
             if shapeDropped {
                 shapeIsVisible[shapeIndex] = false
                 removeFullLinesAndCells()
@@ -273,7 +283,7 @@ class GameScene: SKScene {
                 var gameOver = true
                 for (shapeIndex, shape) in currentShapes.enumerated() {
                     if shapeIsVisible[shapeIndex] {
-                        if shapeFits(shape) {
+                        if shapeFits(shape.0) {
                             gameOver = false
                             break
                         }
@@ -300,8 +310,8 @@ class GameScene: SKScene {
         }
         
     }
-    
-    func dropShape(_ color: UIColor) -> Bool {
+    var lastDropZone = [-1, -1]
+    func dropShape(_ color: UIColor, highlight: Bool = false) -> Bool {
         var blocksToColor : [[Int]] = []
         for (_, line) in newShapeNodes[shapeIndex].enumerated() {
             for (_, block) in line.enumerated() {
@@ -330,6 +340,19 @@ class GameScene: SKScene {
                 }
             }
         }
+        if highlight && blocksToColor.count > 0 {
+            
+            if blocksToColor[0] != lastDropZone {
+                for xy in blocksToColor {
+                    isSquareSolid[xy[0]][xy[1]] = true
+                }
+                removeFullLinesAndCells(highlightOnly: true)
+                for xy in blocksToColor {
+                    isSquareSolid[xy[0]][xy[1]] = false
+                }
+                lastDropZone = blocksToColor[0]
+            }
+        }
         for xy in blocksToColor {
             board[xy[0]][xy[1]].strokeColor = color
             isSquareSolid[xy[0]][xy[1]] = color != boardBackgroundColor && color != previewColor
@@ -337,7 +360,16 @@ class GameScene: SKScene {
         return true
     }
     
-    func removeFullLinesAndCells() {
+    func removeHighlight() {
+        for line in board {
+            for square in line {
+                square.alpha = 1.0
+            }
+        }
+        lastDropZone = [-1, -1]
+    }
+    
+    func removeFullLinesAndCells(highlightOnly: Bool = false) {
         var blocksForRemoval : [[Int]] = []
         var rowCount = 0
         var cellCount = 0
@@ -377,7 +409,15 @@ class GameScene: SKScene {
                 }
             }
         }
-        
+        if highlightOnly {
+            for xy in blocksForRemoval {
+                board[xy[0]][xy[1]].alpha = 0.5
+            }
+            if blocksForRemoval.count == 0 {
+                removeHighlight()
+            }
+            return
+        }
         
         for xy in blocksForRemoval {
             board[xy[0]][xy[1]].strokeColor = boardBackgroundColor
@@ -389,8 +429,8 @@ class GameScene: SKScene {
         }
         scoreLabel.text = "\(score)"
     }
+    
     var score = 0
-    var shapeColors : [UIColor] = [.yellow, .cyan, .orange, .blue, .purple, .red, .green, .magenta, .brown, .yellow, .cyan, .orange,.yellow, .cyan, .orange]
     var shapes = [
         [[1, 1],
          [1, 1]],
@@ -435,10 +475,10 @@ class GameScene: SKScene {
           [0, 1, 0]]
     ]
     
-    func getRandomShape() -> Array<[Int]> {
+    func getRandomShape() -> (Array<[Int]>, Int) {
         var newshape:Array<[Int]>
-        
-        let shape = shapes[Int.random(in: 0..<shapes.count)]
+        let shapeNumber = Int.random(in: 0..<shapes.count)
+        let shape = shapes[shapeNumber]
         let rotation = Int.random(in: 0..<4)
         if (rotation == 1 || rotation == 3) { // 90 or 270 deg
             newshape = Array(repeating: Array(repeating: 0, count: shape.count), count: shape[0].count)
@@ -461,9 +501,9 @@ class GameScene: SKScene {
                 }
             }
         } else {
-            return shape
+            return (shape, shapeNumber)
         }
-        return newshape
+        return (newshape, shapeNumber)
     }
     
    
