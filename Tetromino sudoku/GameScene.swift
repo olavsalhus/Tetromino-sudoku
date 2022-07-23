@@ -18,7 +18,7 @@ class GameScene: SKScene {
     let brickMargin : CGFloat = 0.1
     var brickInnerSizeRatio = CGFloat()
     
-    let boardBackgroundColor = UIColor.darkGray
+    let boardBackgroundColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0)
     
     func createBoard() {
         // Create board
@@ -39,22 +39,13 @@ class GameScene: SKScene {
                 board[x][y].lineWidth = gridsize * brickMargin
                 
                 board[x][y].strokeColor = boardBackgroundColor //(((x/3+y/3)) % 2 == 1) ? .gray : .darkGray
-                
+                addShaderToBlock(board[x][y])
                 addChild(board[x][y])
             }
         }
     }
     
-    override func sceneDidLoad() {
-        // Removing example label programmatically, cannot access .sks file,
-        (self.childNode(withName: "//helloLabel") as? SKLabelNode)?.removeFromParent()
-        board = Array(repeating: Array(repeating: SKShapeNode(), count: boardHeight), count: boardWidth)
-        isSquareSolid = Array(repeating: Array(repeating: false, count: boardHeight), count: boardWidth)
-        backgroundColor = .black
-        
-        createBoard()
-        
-        // Draw lines seperating cells
+    fileprivate func drawSeperatorLines() {
         for line in [1, 2] {
             let pathX = UIBezierPath()
             pathX.move(to: CGPoint(
@@ -86,6 +77,18 @@ class GameScene: SKScene {
             lineY.lineWidth = 4
             addChild(lineY)
         }
+    }
+    
+    override func sceneDidLoad() {
+        // Removing example label programmatically, cannot access .sks file,
+        (self.childNode(withName: "//helloLabel") as? SKLabelNode)?.removeFromParent()
+        board = Array(repeating: Array(repeating: SKShapeNode(), count: boardHeight), count: boardWidth)
+        isSquareSolid = Array(repeating: Array(repeating: false, count: boardHeight), count: boardWidth)
+        backgroundColor = .black
+        
+        createBoard()
+        
+        drawSeperatorLines()
         
         
         currentShapes = [getRandomShape(), getRandomShape(), getRandomShape()]
@@ -101,6 +104,7 @@ class GameScene: SKScene {
                     newShapeNodes[shapeIndex][x][y].strokeColor = getShapeColor(currentShapes[shapeIndex].1)
                     newShapeNodes[shapeIndex][x][y].lineWidth = newShapeGridSize * brickMargin
                     newShapeNodes[shapeIndex][x][y].isHidden = true
+                    addShaderToBlock(newShapeNodes[shapeIndex][x][y])
                     addChild(newShapeNodes[shapeIndex][x][y])
                 }
             }
@@ -138,10 +142,93 @@ class GameScene: SKScene {
                     block.position.y = newShapeGridSize * CGFloat(y + 4) + brickMargin - size.height / 2.0
                     (block.xScale, block.yScale) = (1, 1)
                     block.strokeColor = getShapeColor(currentShapes[shapeIndex].1)
+                    //block.strokeColor = UIColor.clear
                     block.isHidden = !(shapeIsVisible[shapeIndex] && (x < wShape && y < hShape && currentShapes[shapeIndex].0[x][y] == 1))
+                    //block.glowWidth = 15
+                    addShaderToBlock(block);
                 }
             }
         }
+    }
+    
+    func getRgba(_ color: UIColor) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) {
+        
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+
+        return (r: red, g: green, b: blue, a: alpha)
+        
+    }
+    
+    func addShaderToBlock(_ block: SKShapeNode) {
+        
+        let checkerboardShader = SKShader(source:
+"""
+
+float getDistanceFromHollowSquare(vec2 pos) {
+    
+    float r = 0.4;
+    bool isDiagonallyOutside = abs(pos.x) > r && abs(pos.y) > r;
+    if (isDiagonallyOutside) return length(vec2(abs(pos.x), abs(pos.y)) - r);
+    
+    bool isOutside = abs(pos.x) > r || abs(pos.y) > r;
+    
+    if (isOutside) return max(abs(pos.x) - r, abs(pos.y) - r);
+    
+    // Handle inside of square
+    
+    // This line prevented sharp diagonal lines, uncomment this line to get the shortest distance
+    return 1.0 / (1.0 / abs(pos.x - r) + 1.0 / abs(pos.y - r) + 1.0 / abs(pos.x + r) + 1.0 / abs(pos.y + r)) * 2.0;
+    
+    return min(
+        min(abs(pos.x - r), abs(pos.y - r)),
+        min(abs(pos.x + r), abs(pos.y + r))
+    );
+    
+}
+//https://www.shadertoy.com/view/3s3GDn
+float getGlow(float dist, float radius, float intensity){
+    return pow(radius/dist, intensity);
+}
+            void main() {
+                float intensity = 1.3;
+                float radius = 0.20;
+                vec2 uv = v_tex_coord;
+                vec2 centre = vec2(0.5, 0.5);
+                vec2 pos = uv- centre;
+    //Get first segment
+    float dist1 = getDistanceFromHollowSquare(pos);
+                //https://www.shadertoy.com/view/3s3GDn
+                float glow1 = getGlow(dist1, radius, intensity);
+                
+                vec3 col =
+                  + glow1 * clamp(u_color, 0.05, 1.0);
+                
+                //Tone mapping
+                col = 1.0 - exp(-col);
+                
+                //Gamma
+                col = pow(col, vec3(1.5));
+
+                //Output to screen
+                gl_FragColor = vec4(col,1.0);
+            }
+"""
+        )
+        let colors = getRgba(block.strokeColor)
+        let a = Float(block.alpha)
+        checkerboardShader.uniforms = [
+            SKUniform(name: "u_color", vectorFloat3: vector_float3(
+                Float(colors.r) * a, Float(colors.g) * a, Float(colors.b) * a
+            ))
+        ]
+        block.lineWidth = 0 // Shader is used to draw line instead
+        
+        
+        block.fillShader = checkerboardShader
     }
     
     
@@ -149,15 +236,15 @@ class GameScene: SKScene {
 
         let (hShape, wShape) = (currentShapes[shapeIndex].0[0].count, currentShapes[shapeIndex].0.count)
         
-            for (x, line) in newShapeNodes[shapeIndex].enumerated() {
-                for (y, block) in line.enumerated() {
-                    block.position.x = gridsize * (CGFloat(x) - CGFloat(wShape)/2.0) + brickMargin + p.x
-                    block.position.y = gridsize * (2.0 + CGFloat(y) - CGFloat(wShape) / 2.0) + brickMargin + p.y
-                    block.xScale = 2
-                    block.yScale = 2
-                    block.isHidden = !(shapeIsVisible[shapeIndex] && x < wShape && y < hShape && currentShapes[shapeIndex].0[x][y] == 1)
-                }
+        for (x, line) in newShapeNodes[shapeIndex].enumerated() {
+            for (y, block) in line.enumerated() {
+                block.position.x = gridsize * (CGFloat(x) - CGFloat(wShape)/2.0) + brickMargin + p.x
+                block.position.y = gridsize * (2.0 + CGFloat(y) - CGFloat(wShape) / 2.0) + brickMargin + p.y
+                block.xScale = 2
+                block.yScale = 2
+                block.isHidden = !(shapeIsVisible[shapeIndex] && x < wShape && y < hShape && currentShapes[shapeIndex].0[x][y] == 1)
             }
+        }
         
     }
     
@@ -220,6 +307,7 @@ class GameScene: SKScene {
         for (x, line) in board.enumerated() {
             for (y, square) in line.enumerated() {
                 square.strokeColor = boardBackgroundColor
+                addShaderToBlock(square)
                 isSquareSolid[x][y] = false
             }
         }
@@ -355,6 +443,7 @@ class GameScene: SKScene {
         }
         for xy in blocksToColor {
             board[xy[0]][xy[1]].strokeColor = color
+            addShaderToBlock(board[xy[0]][xy[1]])
             isSquareSolid[xy[0]][xy[1]] = color != boardBackgroundColor && color != previewColor
         }
         return true
@@ -363,7 +452,10 @@ class GameScene: SKScene {
     func removeHighlight() {
         for line in board {
             for square in line {
-                square.alpha = 1.0
+                if (square.alpha != 1.0) {
+                    square.alpha = 1.0
+                    addShaderToBlock(square)
+                }
             }
         }
         lastDropZone = [-1, -1]
@@ -412,6 +504,7 @@ class GameScene: SKScene {
         if highlightOnly {
             for xy in blocksForRemoval {
                 board[xy[0]][xy[1]].alpha = 0.5
+                addShaderToBlock(board[xy[0]][xy[1]])
             }
             if blocksForRemoval.count == 0 {
                 removeHighlight()
@@ -421,6 +514,7 @@ class GameScene: SKScene {
         
         for xy in blocksForRemoval {
             board[xy[0]][xy[1]].strokeColor = boardBackgroundColor
+            addShaderToBlock(board[xy[0]][xy[1]])
             isSquareSolid[xy[0]][xy[1]] = false
         }
         score += 100 * (cellCount + rowCount)
